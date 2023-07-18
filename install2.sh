@@ -5,6 +5,25 @@ function bold_echo {
   echo -e "\033[1m$1\033[0m"
 }
 
+# Function to list available disks and prompt for selection
+function select_disk {
+  disks=($(lsblk -d -n -o NAME))
+  bold_echo "Available disks:"
+  for ((i = 0; i < ${#disks[@]}; i++)); do
+    echo "$i. /dev/${disks[i]}"
+  done
+  read -p "Enter the number of the disk to use (e.g., 0, 1, 2, ...): " disk_number
+  selected_disk="/dev/${disks[disk_number]}"
+}
+
+# Function to create partitions on the selected disk
+function create_partitions {
+  parted -s $selected_disk mklabel gpt
+  parted -s $selected_disk mkpart primary 1MiB 512MiB   # EFI System Partition (ESP)
+  parted -s $selected_disk set 1 boot on
+  parted -s $selected_disk mkpart primary 512MiB 100%   # Root partition
+}
+
 # Prompt for Desktop Environment Selection
 bold_echo "Choose Desktop Environment:"
 bold_echo "1. GNOME"
@@ -12,19 +31,19 @@ bold_echo "2. KDE"
 bold_echo "3. XFCE"
 read -p "Enter your choice (1/2/3): " desktop_choice
 
-# Disk partitioning
+# Prompt and select the disk for installation
+select_disk
+
+# Create partitions on the selected disk
 bold_echo "Automatically partitioning the disk..."
-parted -s /dev/sda mklabel gpt
-parted -s /dev/sda mkpart primary 1MiB 512MiB   # EFI System Partition (ESP)
-parted -s /dev/sda set 1 boot on
-parted -s /dev/sda mkpart primary 512MiB 100%   # Root partition
+create_partitions
 
 # Format partitions
-mkfs.vfat -F32 /dev/sda1
-mkfs.btrfs /dev/sda2
+mkfs.vfat -F32 "${selected_disk}1"
+mkfs.btrfs "${selected_disk}2"
 
 # Mount the root partition
-mount /dev/sda2 /mnt
+mount "${selected_disk}2" /mnt
 
 # Create subvolumes for root partition
 btrfs su cr /mnt/@
@@ -33,10 +52,10 @@ btrfs su cr /mnt/@var
 
 # Mount the subvolumes
 umount /mnt
-mount -o noatime,compress=zstd,space_cache=v2,subvol=@ /dev/sda2 /mnt
+mount -o noatime,compress=zstd,space_cache=v2,subvol=@ "${selected_disk}2" /mnt
 mkdir -p /mnt/{boot/efi,home,var}
-mount -o noatime,compress=zstd,space_cache=v2,subvol=@home /dev/sda2 /mnt/home
-mount -o noatime,compress=zstd,space_cache=v2,subvol=@var /dev/sda2 /mnt/var
+mount -o noatime,compress=zstd,space_cache=v2,subvol=@home "${selected_disk}2" /mnt/home
+mount -o noatime,compress=zstd,space_cache=v2,subvol=@var "${selected_disk}2" /mnt/var
 
 # Install the base system and necessary packages
 pacstrap /mnt base base-devel linux linux-firmware btrfs-progs sudo grub networkmanager
