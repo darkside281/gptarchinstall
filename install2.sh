@@ -1,64 +1,122 @@
 #!/bin/bash
 
-# Check if the script is run as root
-if [ "$EUID" -ne 0 ]; then
-  echo "Please run this script as root."
-  exit 1
+# Function to display a message with a separator
+function print_message() {
+    echo "=========================================="
+    echo "$1"
+    echo "=========================================="
+}
+
+# Check if the script is being run as root
+if [[ $EUID -ne 0 ]]; then
+   echo "This script must be run as root."
+   exit 1
 fi
 
-echo "Welcome to the Arch Linux installation script."
+# Check for internet connectivity
+print_message "Checking internet connectivity..."
+ping -c 3 google.com > /dev/null 2>&1
+if [ $? -ne 0 ]; then
+    echo "Internet connection not found. Please connect to the internet and run the script again."
+    exit 1
+fi
 
-# Prompt for the disk to use for installation
-echo "Please select the disk to use for installation:"
+# List available disk drives
+print_message "Available disk drives:"
 lsblk
-read -p "Enter the disk (e.g., /dev/sda): " install_disk
+echo
 
-# Partition the disk
-echo "Partitioning the disk..."
-sgdisk --zap-all "$install_disk"
-sgdisk -n 1:2048:4095 -c 1:"BIOS Boot Partition" -t 1:ef02 "$install_disk"
-sgdisk -n 2:0:+512M -c 2:"EFI System Partition" -t 2:ef00 "$install_disk"
-sgdisk -n 3:0:0 -c 3:"Linux Filesystem" -t 3:8300 "$install_disk"
+# Prompt for disk selection
+read -p "Enter the disk to use for installation (e.g., /dev/sda): " disk
 
-# Format the partitions
-echo "Formatting partitions..."
-mkfs.ext2 "${install_disk}2"  # EFI System Partition
-mkfs.btrfs "${install_disk}3" # Linux Filesystem
+# Partition and format the disk
+print_message "Partitioning and formatting the disk $disk..."
+sgdisk --clear \
+       --new=1:0:0 \
+       --typecode=1:ef00 \
+       $disk
+mkfs.btrfs -L arch /dev/sdX1
+mount /dev/sdX1 /mnt
 
-# Set up Btrfs subvolumes
-echo "Creating Btrfs subvolumes..."
-mount "${install_disk}3" /mnt
-btrfs subvolume create /mnt/@
-btrfs subvolume create /mnt/@home
-umount /mnt
+# Create a swap file in the root partition
+print_message "Creating a swap file..."
+truncate -s 0 /mnt/swapfile
+chattr +C /mnt/swapfile
+btrfs property set /mnt/swapfile compression none
+dd if=/dev/zero of=/mnt/swapfile bs=1M count=4096
+chmod 600 /mnt/swapfile
+mkswap /mnt/swapfile
+swapon /mnt/swapfile
 
-# Mount the subvolumes
-echo "Mounting partitions..."
-mount -o noatime,compress=zstd,space_cache,subvol=@ "${install_disk}3" /mnt
-mkdir /mnt/home
-mount -o noatime,compress=zstd,space_cache,subvol=@home "${install_disk}3" /mnt/home
-mkdir /mnt/boot
-mount "${install_disk}2" /mnt/boot
+# Install base packages
+print_message "Installing base packages..."
+pacstrap /mnt base base-devel linux linux-firmware
 
-# Install essential packages and GNOME desktop environment (same as previous examples)
-# Generate fstab (same as previous examples)
-# Install yay (AUR helper, same as previous examples)
-# Install Google Chrome using yay (same as previous examples)
-# Install Surface Linux kernel from GitHub (same as previous examples)
-# Prompt for the new user (same as previous examples)
+# Generate fstab
+print_message "Generating fstab..."
+genfstab -U /mnt >> /mnt/etc/fstab
 
-# Create the new user (same as previous examples)
+# Chroot into the new system
+print_message "Chrooting into the new system..."
+arch-chroot /mnt
 
-# Give sudo access to the new user (same as previous examples)
+# Set the time zone
+print_message "Setting the time zone..."
+ln -sf /usr/share/zoneinfo/Region/City /etc/localtime
+# Replace "Region" and "City" with your actual time zone, e.g., "America/New_York"
 
-# Install and configure the GRUB bootloader (assuming UEFI system)
-echo "Installing GRUB bootloader..."
-pacman -S --noconfirm grub efibootmgr
-grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=arch_grub
-grub-mkconfig -o /boot/grub/grub.cfg
+# Prompt for locale selection
+print_message "Available locales:"
+cat /etc/locale.gen
+echo
 
-# Enable NetworkManager
+read -p "Enter the desired locale from the above list (e.g., en_US.UTF-8): " selected_locale
+echo "$selected_locale" > /etc/locale.conf
+locale-gen
+
+# Prompt for keyboard layout selection
+print_message "Available keyboard layouts:"
+ls /usr/share/kbd/keymaps/**/*.map.gz
+echo
+
+read -p "Enter the desired keyboard layout from the above list (e.g., us): " keyboard_layout
+echo "KEYMAP=$keyboard_layout" > /etc/vconsole.conf
+
+# Set the hostname
+print_message "Setting the hostname..."
+read -p "Enter the hostname for the system: " hostname
+echo "$hostname" > /etc/hostname
+
+# Install and configure NetworkManager
+print_message "Installing and configuring NetworkManager..."
+pacman -S networkmanager
 systemctl enable NetworkManager
 
-# Rest of the installation process...
-# (the rest of the script from the previous examples)
+# Install GNOME desktop environment and necessary apps
+print_message "Installing GNOME desktop environment and necessary apps..."
+pacman -S gnome gnome-extra
+
+# Create a new user
+print_message "Creating a new user..."
+read -p "Enter the username for the new user: " username
+useradd -m -G wheel $username
+
+# Prompt for sudo privileges
+read -p "Do you want to grant sudo privileges to the user? (y/n): " sudo_option
+if [[ $sudo_option == "y" || $sudo_option == "Y" ]]; then
+    echo "%wheel ALL=(ALL) ALL" >> /etc/sudoers
+    echo "Sudo privileges granted to $username."
+else
+    echo "Sudo privileges not granted to $username."
+fi
+
+# Install yay (AUR helper)
+print_message "Installing yay (AUR helper)..."
+su - $username -c "git clone https://aur.archlinux.org/yay.git /tmp/yay && cd /tmp/yay && makepkg -si --noconfirm"
+
+# Install Google Chrome using yay
+print_message "Installing Google Chrome..."
+su - $username -c "yay -S google-chrome --noconfirm"
+
+print_message "Arch Linux installation and setup with GNOME desktop completed successfully!"
+echo "Please exit the chroot environment by typing 'exit' and then reboot your system."
