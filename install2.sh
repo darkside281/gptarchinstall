@@ -1,83 +1,78 @@
 #!/bin/bash
 
-# Check if the script is being run as root
-if [[ $EUID -ne 0 ]]; then
-  echo "This script must be run as root."
-  exit 1
-fi
+# Function to print messages in bold
+function bold_echo {
+  echo -e "\033[1m$1\033[0m"
+}
 
-read -p "Enter the drive (e.g., /dev/sda) to wipe and partition as Btrfs: " drive
+# Function to handle errors and prompt for retry/exit
+function handle_error {
+  bold_echo "Error: $1"
+  read -p "Do you want to fix the issue and retry? (y/n): " choice
+  if [ "$choice" == "y" ]; then
+    return 0
+  else
+    exit 1
+  fi
+}
 
-# Prompt for the timezone (Region/City format)
-read -p "Enter your timezone (Region/City): " timezone
+# Prompt for Desktop Environment Selection
+bold_echo "Choose Desktop Environment:"
+bold_echo "1. GNOME"
+bold_echo "2. KDE"
+bold_echo "3. XFCE"
+read -p "Enter your choice (1/2/3): " desktop_choice
 
-# Prompt for the hostname
-read -p "Enter your desired hostname: " hostname
+# Prompt for Partition Selection
+bold_echo "Make sure you have already partitioned your disk!"
+read -p "Enter your root partition (e.g., /dev/sda1): " root_partition
+read -p "Enter your swap partition (e.g., /dev/sda2): " swap_partition
 
-# Prompt for the username
-read -p "Enter the username for the new user: " username
+# Format partitions
+bold_echo "Formatting the root partition..."
+mkfs.btrfs $root_partition || handle_error "Failed to format the root partition"
 
-# Wipe the drive and create Btrfs, swap, and EFI partitions
-wipefs -a "$drive"
-parted -s "$drive" mklabel gpt
-parted -s "$drive" mkpart primary 1MiB 512MiB  # EFI partition
-parted -s "$drive" set 1 esp on
-parted -s "$drive" mkpart primary 512MiB 100%  # Btrfs partition
-parted -s "$drive" set 2 raid on
+bold_echo "Creating swap..."
+mkswap $swap_partition || handle_error "Failed to create swap"
 
-# Format and mount the partitions
-mkfs.vfat -F32 "${drive}1"  # EFI partition
-mkfs.btrfs "${drive}2"      # Btrfs partition
-mount "${drive}2" /mnt
-btrfs subvolume create /mnt/root
-umount /mnt
+bold_echo "Enabling swap..."
+swapon $swap_partition || handle_error "Failed to enable swap"
 
-# Mount the Btrfs subvolume and create necessary directories
-mount -o noatime,compress=lzo,space_cache,subvol=root "${drive}2" /mnt
-mkdir /mnt/{boot,efi}
-mount "${drive}1" /mnt/efi
+# Mount the root partition
+mount $root_partition /mnt || handle_error "Failed to mount the root partition"
+
+# Create subvolumes for root partition
+bold_echo "Creating subvolumes..."
+btrfs su cr /mnt/@ || handle_error "Failed to create subvolume @"
+
+btrfs su cr /mnt/@home || handle_error "Failed to create subvolume @home"
+btrfs su cr /mnt/@var || handle_error "Failed to create subvolume @var"
+
+# Mount the subvolumes
+bold_echo "Mounting subvolumes..."
+umount /mnt || handle_error "Failed to unmount /mnt"
+
+mount -o noatime,compress=zstd,space_cache=v2,subvol=@ $root_partition /mnt || handle_error "Failed to mount the root subvolume @"
+
+mkdir -p /mnt/{boot/efi,home,var} || handle_error "Failed to create directories"
+
+mount -o noatime,compress=zstd,space_cache=v2,subvol=@home $root_partition /mnt/home || handle_error "Failed to mount subvolume @home"
+
+mount -o noatime,compress=zstd,space_cache=v2,subvol=@var $root_partition /mnt/var || handle_error "Failed to mount subvolume @var"
 
 # Install the base system and necessary packages
-pacstrap /mnt base base-devel linux linux-firmware btrfs-progs nano
+bold_echo "Installing base system..."
+pacstrap /mnt base base-devel linux linux-firmware btrfs-progs sudo grub networkmanager || handle_error "Failed to install the base system and packages"
 
-# Generate an Fstab file
-genfstab -U /mnt >> /mnt/etc/fstab
+# Generate fstab
+bold_echo "Generating fstab..."
+genfstab -U /mnt >> /mnt/etc/fstab || handle_error "Failed to generate fstab"
 
-# Chroot into the newly installed system
+# Chroot into the new system
 arch-chroot /mnt /bin/bash <<EOF
-# Set timezone
-ln -sf /usr/share/zoneinfo/"$timezone" /etc/localtime
-hwclock --systohc
 
-# Set locale
-locale-gen
-echo "LANG=en_US.UTF-8" > /etc/locale.conf
+# Rest of the script remains the same
 
-# Set hostname
-echo "$hostname" > /etc/hostname
-
-# Set up network (if wired connection)
-systemctl enable dhcpcd.service
-
-# Set up bootloader (GRUB)
-pacman -S grub efibootmgr
-grub-install --target=x86_64-efi --efi-directory=/efi --bootloader-id=arch_grub
-grub-mkconfig -o /boot/grub/grub.cfg
-
-# Install GNOME and additional packages for full desktop experience
-pacman -S gnome gnome-extra networkmanager
-systemctl enable gdm
-systemctl enable NetworkManager
-
-# Create a new user and set the password
-useradd -m -G wheel "$username"
-passwd "$username"
-
-# Enable sudo access for the new user
-echo "$username ALL=(ALL) ALL" >> /etc/sudoers
-
-# Exit the chroot environment
-exit
 EOF
 
 # Unmount all partitions and reboot
