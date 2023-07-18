@@ -26,6 +26,9 @@ print_message "Available disk drives:"
 lsblk
 echo
 
+# Get the list of disk devices
+disk_list=$(lsblk -nlpo NAME)
+
 # Prompt for disk selection
 read -p "Enter the disk number to use for installation (e.g., 1, 2, etc.): " disk_num
 
@@ -36,7 +39,7 @@ if ! [[ "$disk_num" =~ ^[1-9]+$ ]]; then
 fi
 
 # Get the disk corresponding to the chosen number
-selected_disk="/dev/$(lsblk -nlpo NAME | sed -n "${disk_num}p")"
+selected_disk="/dev/$(echo "$disk_list" | sed -n "${disk_num}p")"
 
 # Partition the disk using gdisk
 print_message "Partitioning the disk $selected_disk..."
@@ -140,5 +143,4 @@ su - $username -c "git clone https://aur.archlinux.org/yay.git /tmp/yay && cd /t
 print_message "Installing Google Chrome..."
 su - $username -c "yay -S google-chrome --noconfirm"
 
-print_message "Arch Linux installation and setup with GNOME desktop completed successfully!"
-echo "Please exit the chroot environment by typing 'exit' and then reboot your system."
+print_message "Arch Linux installation and setup
