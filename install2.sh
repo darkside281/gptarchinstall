@@ -50,7 +50,7 @@ swapon /mnt/swapfile
 
 # Mount tmpfs on /tmp in chroot environment
 print_message "Mounting tmpfs on /tmp..."
-mount -o rw,nosuid,nodev,noexec,relatime,size=2G tmpfs /mnt/tmp
+mount -o rw,nosuid,nodev,noexec,relatime,size=4G tmpfs /mnt/tmp
 chmod 1777 /mnt/tmp
 
 # Install base packages
