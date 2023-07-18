@@ -27,20 +27,47 @@ lsblk
 echo
 
 # Prompt for disk selection
-read -p "Enter the disk to use for installation (e.g., /dev/sda): " disk
+read -p "Enter the disk number to use for installation (e.g., 1, 2, etc.): " disk_num
 
-# Partition the disk
-print_message "Partitioning the disk $disk..."
-parted --script $disk mklabel gpt mkpart primary 0% 100%
-parted $disk set 1 esp on
+# Check if the disk number is valid
+if ! [[ "$disk_num" =~ ^[1-9]+$ ]]; then
+    echo "Invalid disk number. Please enter a valid number."
+    exit 1
+fi
 
-# Format the partition as btrfs
-print_message "Formatting the partition as btrfs..."
-mkfs.btrfs -L arch ${disk}1
+# Get the disk corresponding to the chosen number
+selected_disk="/dev/$(lsblk -nlpo NAME | sed -n "${disk_num}p")"
+
+# Partition the disk using gdisk
+print_message "Partitioning the disk $selected_disk..."
+gdisk $selected_disk << EOF
+o
+Y
+n
+1
+
++512M
+EF00
+n
+2
+
+
+8300
+w
+Y
+EOF
+
+# Format the EFI partition
+print_message "Formatting the EFI partition..."
+mkfs.fat -F32 ${selected_disk}1
+
+# Format the root partition as btrfs
+print_message "Formatting the root partition as btrfs..."
+mkfs.btrfs -L arch ${selected_disk}2
 
 # Mount the btrfs partition
 print_message "Mounting the btrfs partition..."
-mount ${disk}1 /mnt
+mount ${selected_disk}2 /mnt
 
 # Create a swap file in the root partition
 print_message "Creating a swap file..."
