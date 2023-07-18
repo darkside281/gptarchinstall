@@ -8,33 +8,48 @@ fi
 
 echo "Welcome to the Arch Linux installation script."
 
-# Prompt for the keyboard layout, locale, and time zone (same as previous examples)
+# Prompt for the disk to use for installation
+echo "Please select the disk to use for installation:"
+lsblk
+read -p "Enter the disk (e.g., /dev/sda): " install_disk
 
-# Install essential packages and GNOME desktop environment
-echo "Installing Arch Linux and GNOME desktop environment..."
-pacstrap /mnt base linux linux-firmware btrfs-progs sudo vim networkmanager gnome gdm gnome-extra --noconfirm
+# Partition the disk
+echo "Partitioning the disk..."
+sgdisk --zap-all "$install_disk"
+sgdisk -n 1:2048:4095 -c 1:"BIOS Boot Partition" -t 1:ef02 "$install_disk"
+sgdisk -n 2:0:+512M -c 2:"EFI System Partition" -t 2:ef00 "$install_disk"
+sgdisk -n 3:0:0 -c 3:"Linux Filesystem" -t 3:8300 "$install_disk"
 
+# Format the partitions
+echo "Formatting partitions..."
+mkfs.ext2 "${install_disk}2"  # EFI System Partition
+mkfs.btrfs "${install_disk}3" # Linux Filesystem
+
+# Set up Btrfs subvolumes
+echo "Creating Btrfs subvolumes..."
+mount "${install_disk}3" /mnt
+btrfs subvolume create /mnt/@
+btrfs subvolume create /mnt/@home
+umount /mnt
+
+# Mount the subvolumes
+echo "Mounting partitions..."
+mount -o noatime,compress=zstd,space_cache,subvol=@ "${install_disk}3" /mnt
+mkdir /mnt/home
+mount -o noatime,compress=zstd,space_cache,subvol=@home "${install_disk}3" /mnt/home
+mkdir /mnt/boot
+mount "${install_disk}2" /mnt/boot
+
+# Install essential packages and GNOME desktop environment (same as previous examples)
 # Generate fstab (same as previous examples)
-
 # Install yay (AUR helper, same as previous examples)
-
 # Install Google Chrome using yay (same as previous examples)
-
 # Install Surface Linux kernel from GitHub (same as previous examples)
+# Prompt for the new user (same as previous examples)
 
-# Prompt for the new user
-read -p "Enter your desired username: " username
+# Create the new user (same as previous examples)
 
-# Create the new user
-useradd -m -G wheel "$username"
-echo "Set a password for the new user:"
-passwd "$username"
-
-# Give sudo access to the new user
-read -p "Do you want to grant sudo access to $username? (y/N): " grant_sudo
-if [[ "$grant_sudo" =~ ^[Yy]$ ]]; then
-  echo "%wheel ALL=(ALL) ALL" >> /etc/sudoers
-fi
+# Give sudo access to the new user (same as previous examples)
 
 # Install and configure the GRUB bootloader (assuming UEFI system)
 echo "Installing GRUB bootloader..."
