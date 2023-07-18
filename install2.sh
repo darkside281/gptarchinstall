@@ -48,6 +48,11 @@ chmod 600 /mnt/swapfile
 mkswap /mnt/swapfile
 swapon /mnt/swapfile
 
+# Mount tmpfs on /tmp in chroot environment
+print_message "Mounting tmpfs on /tmp..."
+mount -o rw,nosuid,nodev,noexec,relatime,size=2G tmpfs /mnt/tmp
+chmod 1777 /mnt/tmp
+
 # Install base packages
 print_message "Installing base packages..."
 pacstrap /mnt base base-devel linux linux-firmware
@@ -63,24 +68,15 @@ arch-chroot /mnt
 # Set the time zone
 print_message "Setting the time zone..."
 ln -sf /usr/share/zoneinfo/Region/City /etc/localtime
-# Replace "Region" and "City" with your actual time zone, e.g., "America/New_York"
+# Replace "Region" and "City" with your actual time zone, e.g., "Europe/London"
 
-# Prompt for locale selection
-print_message "Available locales:"
-cat /etc/locale.gen
-echo
-
-read -p "Enter the desired locale from the above list (e.g., en_US.UTF-8): " selected_locale
-echo "$selected_locale" > /etc/locale.conf
+# Set the locale to UK (English UK)
+echo "en_GB.UTF-8 UTF-8" > /etc/locale.gen
 locale-gen
+echo "LANG=en_GB.UTF-8" > /etc/locale.conf
 
-# Prompt for keyboard layout selection
-print_message "Available keyboard layouts:"
-ls /usr/share/kbd/keymaps/**/*.map.gz
-echo
-
-read -p "Enter the desired keyboard layout from the above list (e.g., us): " keyboard_layout
-echo "KEYMAP=$keyboard_layout" > /etc/vconsole.conf
+# Set the keyboard layout to UK (English UK)
+echo "KEYMAP=uk" > /etc/vconsole.conf
 
 # Set the hostname
 print_message "Setting the hostname..."
