@@ -29,14 +29,18 @@ echo
 # Prompt for disk selection
 read -p "Enter the disk to use for installation (e.g., /dev/sda): " disk
 
-# Partition and format the disk
-print_message "Partitioning and formatting the disk $disk..."
-sgdisk --clear \
-       --new=1:0:0 \
-       --typecode=1:ef00 \
-       $disk
-mkfs.btrfs -L arch /dev/sdX1
-mount /dev/sdX1 /mnt
+# Partition the disk
+print_message "Partitioning the disk $disk..."
+parted --script $disk mklabel gpt mkpart primary 0% 100%
+parted $disk set 1 esp on
+
+# Format the partition as btrfs
+print_message "Formatting the partition as btrfs..."
+mkfs.btrfs -L arch ${disk}1
+
+# Mount the btrfs partition
+print_message "Mounting the btrfs partition..."
+mount ${disk}1 /mnt
 
 # Create a swap file in the root partition
 print_message "Creating a swap file..."
@@ -47,11 +51,6 @@ dd if=/dev/zero of=/mnt/swapfile bs=1M count=4096
 chmod 600 /mnt/swapfile
 mkswap /mnt/swapfile
 swapon /mnt/swapfile
-
-# Mount tmpfs on /tmp in chroot environment
-print_message "Mounting tmpfs on /tmp..."
-mount -o rw,nosuid,nodev,noexec,relatime,size=4G tmpfs /mnt/tmp
-chmod 1777 /mnt/tmp
 
 # Install base packages
 print_message "Installing base packages..."
