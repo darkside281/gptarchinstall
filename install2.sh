@@ -10,7 +10,9 @@ echo "Welcome to the Arch Linux installation script."
 
 # Prompt for the keyboard layout, locale, and time zone (same as previous examples)
 
-# Install essential packages and GNOME desktop environment (same as previous examples)
+# Install essential packages and GNOME desktop environment
+echo "Installing Arch Linux and GNOME desktop environment..."
+pacstrap /mnt base linux linux-firmware btrfs-progs sudo vim networkmanager gnome gdm gnome-extra --noconfirm
 
 # Generate fstab (same as previous examples)
 
@@ -40,12 +42,7 @@ pacman -S --noconfirm grub efibootmgr
 grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=arch_grub
 grub-mkconfig -o /boot/grub/grub.cfg
 
-# Install NetworkManager
-echo "Installing NetworkManager..."
-pacman -S --noconfirm networkmanager
-
-# Enable NetworkManager service
-echo "Enabling NetworkManager service..."
+# Enable NetworkManager
 systemctl enable NetworkManager
 
 # Rest of the installation process...
