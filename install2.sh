@@ -40,7 +40,12 @@ pacman -S --noconfirm grub efibootmgr
 grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=arch_grub
 grub-mkconfig -o /boot/grub/grub.cfg
 
-# Enable NetworkManager
+# Install NetworkManager
+echo "Installing NetworkManager..."
+pacman -S --noconfirm networkmanager
+
+# Enable NetworkManager service
+echo "Enabling NetworkManager service..."
 systemctl enable NetworkManager
 
 # Rest of the installation process...
