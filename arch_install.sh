@@ -1,5 +1,11 @@
 #!/bin/bash
 
+# Install Git
+pacman -Syu --noconfirm git
+
+# Update repositories
+pacman -Syu
+
 # Prompt for keyboard layout selection
 echo "Choose your keyboard layout:"
 echo "1) US"
@@ -208,7 +214,6 @@ git clone https://aur.archlinux.org/yay.git /tmp/yay
 cd /tmp/yay
 makepkg -si --noconfirm
 cd ~
-rm -rf /tmp/yay
 
 # Install Pamac dependencies
 pacman -Syu --needed polkit-gnome gnome-keyring
