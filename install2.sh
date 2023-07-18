@@ -55,6 +55,23 @@ fi
 # Get the disk corresponding to the chosen number
 selected_disk=${disks[disk_num-1]}
 
+# Check if the disk is an NVMe disk
+if [[ "$selected_disk" == "/dev/nvme"* ]]; then
+    # For NVMe disks, use "p" instead of the disk number for gdisk
+    disk_partition="${selected_disk}p"
+else
+    disk_partition="${selected_disk}"
+fi
+
+# Delete existing partitions on the disk using gdisk
+print_message "Deleting existing partitions on $selected_disk..."
+gdisk $selected_disk << EOF
+d
+d
+w
+Y
+EOF
+
 # Partition the disk using gdisk
 print_message "Partitioning the disk $selected_disk..."
 gdisk $selected_disk << EOF
